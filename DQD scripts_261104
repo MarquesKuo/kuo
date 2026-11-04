@@ -1,0 +1,113 @@
+
+#-----------------------------------Connection---------------------------------
+Sys.setenv(
+  DATABRICKS_SERVER_HOSTNAME = "adb-2976959560275018.18.azuredatabricks.net",
+  DATABRICKS_HTTP_PATH = "/sql/1.0/warehouses/4cda90be766874cb",
+  DATABRICKS_TOKEN = ""
+)
+
+jdbc_url <- paste0(
+  "jdbc:databricks://", Sys.getenv("DATABRICKS_SERVER_HOSTNAME"), ":443;",
+  "transportMode=http;ssl=1;",
+  "httpPath=", Sys.getenv("DATABRICKS_HTTP_PATH"), ";",
+  "AuthMech=3;UID=token;PWD=", Sys.getenv("DATABRICKS_TOKEN"), ";",
+  "UseProxy=1;",
+  "ProxyHost=proxy.jh.edu;",
+  "ProxyPort=3129;",
+  "EnableArrow=0"
+)
+
+connection_details <- DatabaseConnector::createConnectionDetails(
+  dbms = "spark",
+  connectionString = jdbc_url,
+  pathToDriver = "C:/Program Files/DatabricksJDBC42-2.6.38.1068"
+)
+
+connection <- DatabaseConnector::connect(connection_details)
+
+packageVersion("DataQualityDashboard")
+exists("connection_details")
+
+#---------------------------Excuting DQD Parameters----------------------------
+
+cdmDatabaseSchema <- "deid.omop" 
+resultsDatabaseSchema <- "reach_users.mfang16"
+cdmSourceName <- "REACH_OMOP"  # a human readable name for your CDM source
+cdmVersion <- "5.4"            # Currently supports 5.2, 5.3, 5.4, and 5.5
+numThreads <- 1                # Number of threads
+sqlOnly <- FALSE              # TRUE = generate SQL only, do not execute checks
+
+# set to TRUE if you want the generated SQL queries to calculate DQD results and insert them into a database table (@resultsDatabaseSchema.@writeTableName)
+sqlOnlyIncrementalInsert <- FALSE 
+# in sqlOnlyIncrementalInsert mode, the number of check sqls to union in a single query; higher numbers can improve performance in some DBMS (e.g. a value of 25 may be 25x faster)
+sqlOnlyUnionCount <- 1 
+
+outputFolder <- file.path(
+  path.expand("C:/Users/mfang16/Test"),
+  "DQD_test_output"
+)                              # Output Files
+# outputFolder <- "output"    
+outputFile <- "results.json"   # Output Files
+verboseMode <- TRUE            # logging 
+
+# write results to table? 
+writeToTable <- FALSE          # set to FALSE if you want to skip writing to a SQL table in the results schema
+writeTableName <- "dqdashboard_results"  # specify the name of the results table (when writeToTable = TRUE and when sqlOnlyIncrementalInsert = TRUE)
+writeToCsv <- FALSE            # set to FALSE if you want to skip writing to csv file
+csvFile <- ""                  # only needed if writeToCsv is set to TRUE
+
+# DQ check levels  
+checkLevels <- c("TABLE")      # Run table-level checks only
+#checkLevels <- c("TABLE", "FIELD", "CONCEPT")  
+
+# DQ checks
+checkNames <- c()              # Names can be found in inst/csv/OMOP_CDM_v5.3_Check_Descriptions.csv
+
+# DQ severity levels 
+checkSeverity <- c("fatal", "convention", "characterization") 
+
+tablesToExclude <- c(
+  "CONCEPT",
+  "VOCABULARY",
+  "CONCEPT_ANCESTOR",
+  "CONCEPT_RELATIONSHIP",
+  "CONCEPT_CLASS",
+  "CONCEPT_SYNONYM",
+  "RELATIONSHIP",
+  "DOMAIN"
+)                              # list of CDM table names to skip evaluating checks against; by default DQD excludes the vocab tables
+# run the job 
+DataQualityDashboard::executeDqChecks(connectionDetails = connection_details, 
+                                      cdmDatabaseSchema = cdmDatabaseSchema, 
+                                      resultsDatabaseSchema = resultsDatabaseSchema,
+                                      cdmSourceName = cdmSourceName, 
+                                      cdmVersion = cdmVersion,
+                                      numThreads = numThreads,
+                                      sqlOnly = sqlOnly, 
+                                      sqlOnlyUnionCount = sqlOnlyUnionCount,
+                                      sqlOnlyIncrementalInsert = sqlOnlyIncrementalInsert,
+                                      outputFolder = outputFolder,
+                                      outputFile = outputFile,
+                                      verboseMode = verboseMode,
+                                      writeToTable = writeToTable,
+                                      writeToCsv = writeToCsv,
+                                      csvFile = csvFile,
+                                      checkLevels = checkLevels,
+                                      checkSeverity = checkSeverity,
+                                      tablesToExclude = tablesToExclude,
+                                      checkNames = checkNames)
+
+# inspect logs 
+ParallelLogger::launchLogViewer(logFileName = file.path(outputFolder, cdmSourceName, 
+                                                        sprintf("log_DqDashboard_%s.txt", cdmSourceName)))
+
+#Check the result
+checks <- DataQualityDashboard::listDqChecks(cdmVersion = "5.4")
+
+# (OPTIONAL) if you want to write the JSON file to the results table separately
+# jsonFilePath <- ""
+# DataQualityDashboard::writeJsonResultsToTable(connectionDetails = connectionDetails, 
+#                                              resultsDatabaseSchema = resultsDatabaseSchema, 
+#                                              jsonFilePath = jsonFilePath)
+
+
