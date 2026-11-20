@@ -35,7 +35,7 @@ resultsDatabaseSchema <- "reach_users.mfang16"
 cdmSourceName <- "REACH_OMOP"  # a human readable name for your CDM source
 cdmVersion <- "5.4"            # Currently supports 5.2, 5.3, 5.4, and 5.5
 numThreads <- 1                # Number of threads
-sqlOnly <- FALSE              # TRUE = generate SQL only, do not execute checks
+sqlOnly <- FALSE               # TRUE = generate SQL only, do not execute checks
 
 # set to TRUE if you want the generated SQL queries to calculate DQD results and insert them into a database table (@resultsDatabaseSchema.@writeTableName)
 sqlOnlyIncrementalInsert <- FALSE 
@@ -61,7 +61,12 @@ checkLevels <- c("TABLE")      # Run table-level checks only
 #checkLevels <- c("TABLE", "FIELD", "CONCEPT")  
 
 # DQ checks
-checkNames <- c()              # Names can be found in inst/csv/OMOP_CDM_v5.3_Check_Descriptions.csv
+checkNames <- c(
+  "cdmTable",
+  "measurePersonCompleteness",
+  "measureConditionEraCompleteness",
+  "measureObservationPeriodOverlap"
+)              # Names can be found in inst/csv/OMOP_CDM_v5.3_Check_Descriptions.csv
 
 # DQ severity levels 
 checkSeverity <- c("fatal", "convention", "characterization") 
@@ -97,6 +102,25 @@ DataQualityDashboard::executeDqChecks(connectionDetails = connection_details,
                                       tablesToExclude = tablesToExclude,
                                       checkNames = checkNames)
 
+#-------------------------------Shiny Dashboard-------------------------------
+
+# Locate the JSON results file
+jsonPath <- file.path(
+  outputFolder,
+  outputFile
+)
+file.exists(jsonPath)
+
+# Launch the DQD Shiny Dashboard
+DataQualityDashboard::viewDqDashboard(
+  jsonPath = jsonPath
+)   
+
+# Locate the installed DQD package
+system.file(package = "DataQualityDashboard")
+
+
+#--------------------------------------------------------------
 # inspect logs 
 ParallelLogger::launchLogViewer(logFileName = file.path(outputFolder, cdmSourceName, 
                                                         sprintf("log_DqDashboard_%s.txt", cdmSourceName)))
@@ -109,5 +133,3 @@ checks <- DataQualityDashboard::listDqChecks(cdmVersion = "5.4")
 # DataQualityDashboard::writeJsonResultsToTable(connectionDetails = connectionDetails, 
 #                                              resultsDatabaseSchema = resultsDatabaseSchema, 
 #                                              jsonFilePath = jsonFilePath)
-
-
